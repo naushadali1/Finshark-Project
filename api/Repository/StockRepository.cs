@@ -1,4 +1,5 @@
 using api.Data;
+using api.Helper;
 using api.Interfaces;
 using api.Models;
 using api.Models.DTO;
@@ -34,14 +35,49 @@ namespace api.Repository
             return stock;
         }
 
-        public async Task<List<Stock>> GetAllStocksAsync()
+        public async Task<List<Stock>> GetAllStocksAsync(QuerableObject query)
         {
-            return await dBContext.Stock.ToListAsync();
+            var stocks = dBContext.Stock.Include(c => c.Comments).AsQueryable();
+            if (!string.IsNullOrWhiteSpace(query.CompanyName))
+            {
+                stocks = stocks.Where(x => x.CompanyName.Contains(query.CompanyName));
+            }
+            if (!string.IsNullOrWhiteSpace(query.Symbol))
+            {
+                stocks = stocks.Where(x => x.Symbol.Contains(query.Symbol));
+            }
+
+            if (!string.IsNullOrWhiteSpace(query.SortBy))
+            {
+                if (query.SortBy.Equals("Symbol", StringComparison.OrdinalIgnoreCase))
+                {
+                    stocks = query.IsDescending ? stocks.OrderByDescending(s => s.Symbol) : stocks.OrderBy(s => s.Symbol);
+                }
+            }
+
+            if (!string.IsNullOrWhiteSpace(query.SortBy))
+            {
+                if (query.SortBy.Equals("CompanyName", StringComparison.OrdinalIgnoreCase))
+                {
+                    stocks = query.IsDescending ? stocks.OrderByDescending(s => s.CompanyName) : stocks.OrderBy(s => s.CompanyName);
+                }
+            }
+
+            var skipNumber = (query.PageNumber - 1) * query.PageSize;
+
+            return await stocks.Skip(skipNumber).Take(query.PageSize).ToListAsync();
         }
+
+
 
         public async Task<Stock?> GetByIdAsync(int id)
         {
-            return await dBContext.Stock.FindAsync(id);
+            return await dBContext.Stock.Include(c => c.Comments).FirstOrDefaultAsync(x => x.Id == id);
+        }
+
+        public async Task<bool> StockExistsAsync(int id)
+        {
+            return await dBContext.Stock.AnyAsync(e => e.Id == id);
         }
 
         public async Task<Stock?> UpdateAsync(int id, StockUpdateRequestDto stockUpdateRequestDto)
